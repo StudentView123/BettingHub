@@ -2,24 +2,110 @@ import { useState, useEffect } from "react";
 import { LiveSignalFeed } from "@/app/components/LiveSignalFeed";
 import { MarketDetail } from "@/app/components/MarketDetail";
 import { Analytics } from "@/app/components/Analytics";
+import { Auth } from "@/app/components/Auth";
 import { Button } from "@/app/components/ui/button";
-import { Home, BarChart3, Bell, User, Activity } from "lucide-react";
+import { Home, BarChart3, Bell, User, Activity, LogOut } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
+import { useAuth } from "@/app/contexts/AuthContext";
 
 type View = "feed" | "market" | "analytics" | "alerts" | "profile";
 
+function ProfileView({ user }: { user: any }) {
+  const { signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    const { error } = await signOut();
+    if (error) {
+      toast.error(error.message || 'Failed to sign out');
+      setSigningOut(false);
+    } else {
+      toast.success('Successfully signed out');
+    }
+  };
+
+  return (
+    <div className="h-full flex items-center justify-center bg-gray-50 p-4">
+      <div className="w-full max-w-md space-y-6">
+        <div className="bg-white rounded-lg border p-6 space-y-4">
+          <div className="flex items-center justify-center">
+            <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center">
+              <User className="w-10 h-10 text-indigo-600" />
+            </div>
+          </div>
+
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl font-bold text-gray-900">Profile</h2>
+            <p className="text-sm text-gray-600">{user?.email}</p>
+          </div>
+
+          <div className="pt-4 space-y-3">
+            <div className="bg-gray-50 rounded-md p-3">
+              <p className="text-xs text-gray-500 mb-1">User ID</p>
+              <p className="text-sm font-mono text-gray-700 break-all">{user?.id}</p>
+            </div>
+
+            <div className="bg-gray-50 rounded-md p-3">
+              <p className="text-xs text-gray-500 mb-1">Account Created</p>
+              <p className="text-sm text-gray-700">
+                {user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-4">
+            <Button
+              onClick={handleSignOut}
+              variant="destructive"
+              className="w-full"
+              disabled={signingOut}
+            >
+              {signingOut ? (
+                <>
+                  <Activity className="w-4 h-4 mr-2 animate-spin" />
+                  Signing out...
+                </>
+              ) : (
+                <>
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign Out
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border p-6">
+          <h3 className="font-semibold text-gray-900 mb-3">Coming Soon</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Customize your experience with favorite sports, risk tolerance settings,
+            notification preferences, and more.
+          </p>
+          <Button onClick={() => toast.info("Feature coming soon!")} variant="outline" className="w-full">
+            Edit Preferences
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const { user, loading: authLoading } = useAuth();
   const [currentView, setCurrentView] = useState<View>("feed");
   const [selectedMarketId, setSelectedMarketId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
-  
+
   const apiUrl = `https://${projectId}.supabase.co/functions/v1/make-server-fc3822ec`;
 
-  // Initialize the app with mock data
+  // Initialize the app with mock data (only when user is authenticated)
   useEffect(() => {
-    initializeApp();
-  }, []);
+    if (user && !initialized) {
+      initializeApp();
+    }
+  }, [user]);
 
   const initializeApp = async () => {
     try {
@@ -52,6 +138,30 @@ export default function App() {
     setSelectedMarketId(null);
   };
 
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center space-y-4">
+          <Activity className="w-16 h-16 text-indigo-600 mx-auto animate-pulse" />
+          <h2 className="text-2xl font-bold text-gray-900">Signalry</h2>
+          <p className="text-gray-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show auth screen if not authenticated
+  if (!user) {
+    return (
+      <>
+        <Auth onSuccess={() => setInitialized(false)} />
+        <Toaster position="top-right" richColors />
+      </>
+    );
+  }
+
+  // Show initialization loading after authentication
   if (!initialized) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -118,10 +228,7 @@ export default function App() {
               <Button
                 variant={currentView === "profile" ? "secondary" : "ghost"}
                 className="w-full justify-start text-white hover:text-white hover:bg-gray-800"
-                onClick={() => {
-                  setCurrentView("profile");
-                  toast.info("Profile & Settings - Coming soon!");
-                }}
+                onClick={() => setCurrentView("profile")}
               >
                 <User className="w-4 h-4 mr-3" />
                 Profile
@@ -169,10 +276,7 @@ export default function App() {
               className={`flex-1 flex-col h-16 rounded-none ${
                 currentView === "profile" ? "bg-gray-800" : ""
               }`}
-              onClick={() => {
-                setCurrentView("profile");
-                toast.info("Profile & Settings - Coming soon!");
-              }}
+              onClick={() => setCurrentView("profile")}
             >
               <User className="w-5 h-5" />
               <span className="text-xs mt-1">Profile</span>
@@ -229,19 +333,7 @@ export default function App() {
           )}
           
           {currentView === "profile" && (
-            <div className="h-full flex items-center justify-center bg-gray-50">
-              <div className="text-center space-y-3">
-                <User className="w-16 h-16 text-gray-400 mx-auto" />
-                <h2 className="text-2xl font-bold text-gray-900">Profile & Preferences</h2>
-                <p className="text-gray-600 max-w-md">
-                  Customize your experience with favorite sports, risk tolerance settings,
-                  notification preferences, and more.
-                </p>
-                <Button onClick={() => toast.info("Feature coming soon!")}>
-                  Edit Profile
-                </Button>
-              </div>
-            </div>
+            <ProfileView user={user} />
           )}
         </div>
       </div>
